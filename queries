@@ -1,0 +1,43 @@
+--Run on https://app.flipsidecrypto.com/velocity/queries
+
+with good_table as (select 
+block_timestamp, origin_address_name, origin_function_name, 
+from_address, to_address, to_address_name, to_label_subtype, 
+event_name, event_type, contract_address, symbol, amount 
+from ethereum.udm_events WHERE tx_id IN
+(select
+tx_id
+from ethereum.udm_events
+where
+    event_name = 'FundsHarvested'
+    AND contract_address = lower('0xc21D353FF4ee73C572425697f4F5aaD2109fe35b')
+)),
+results as (SELECT 
+block_timestamp, symbol, amount
+--(amount) over (PARTITION BY block_hour ORDER BY block_timestamp RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as total_revenue
+FROM good_table WHERE from_address = lower('0xc21d353ff4ee73c572425697f4f5aad2109fe35b')
+AND to_address = lower('0x8392f6669292fa56123f71949b52d883ae57e225')
+ ),
+summed as (
+    select date_trunc('hour', block_timestamp) as t, sum(amount) as hour_sum
+    from results group by 1 order by 1
+)
+select t, sum(hour_sum) over (order by t asc rows between unbounded preceding and current row) as revenue_to_date
+from summed
+
+--NEXT QUERY STARTS HERE
+
+select
+user_address,
+address_name,
+amount_usd,
+balance,
+price,
+symbol,
+label subtype,
+balance_date
+--date_trunc('hour', balance_date) as b_hour
+from ethereum.erc20_balances
+where
+user_address = lower('0x8392F6669292fA56123F71949B52d883aE57e225')
+AND balance_date >= datefromparts(2021, 2, 27)
